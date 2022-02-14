@@ -1,0 +1,5 @@
+https://aka.ms/vs/17/release/vc_redist.x64.exe
+https://docs.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist
+https://vcredist.com/new-vcintuneapplication/#application-icon
+https://github.com/aaronparker/vcredist
+https://github.com/MSEndpointMgr/IntuneWin32App
