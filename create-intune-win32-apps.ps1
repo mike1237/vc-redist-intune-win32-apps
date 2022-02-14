@@ -2,41 +2,50 @@
 #   Install-Module IntuneWin32App
 #   Install-Module VcRedist
 
-$intuneWinAppDir = "$PWD"
+$SupportedVcVers = 2022, 2013, 2012 # Release Years
+$UnsupportedVcVer = "9.0.30729.6161" # Release Version
 $SourceFolder = "$PWD\source"
 $OutputFolder = "$PWD\output"
-$warningPreference = "SilentlyContinue"
 
-Write-Output "Downloading Source Packages..."
-try{
+#todo
+#document, detect if authenticated to azure, add build-only flag, add download-only flag, auto rewrite output file
+function main {
+    # Supported Pkgs
+    $redists = Get-VcList -Release $SupportedVcVers
+    Get-SourcePkgs $redists
+    Add-IntuneWinPkgs $redists
 
-    $redists = Get-VcList -Release 2022, 2013, 2012
-    Save-VcRedist -VcList $redists -Path $SourceFolder
+    # Unsupported Pkgs
+    # Info: https://vcredist.com/get-vclist/#returning-supported-redistributables
+    $redists = Get-VcList -Export -All | Where-Object { $_.Version -eq $UnsupportedVcVer }
+    Get-SourcePkgs $redists
+    Add-IntuneWinPkgs $redists
+
+    exit    
 }
-catch {
-    Write-Output "Fail to download redists"
-    exit 1
+
+function Get-SourcePkgs {
+    param($redists)
+    Write-Output "Download Source Packages..."
+    Try {
+        Save-VcRedist -VcList $redists -Path $SourceFolder
+    }
+    Catch {
+        Write-Output "Failed to download Source Packages!!"
+        Return 1
+    }
+    Return 0
 }
 
-
-
+function Add-IntuneWinPkgs {
+    param($redists)
     ForEach ($redist in $redists) {
-        write-output "====REDIST $($redist.Name) ===="
-
-        # Package .intunewin
         $SetupFile = (Split-Path $redist.Download -Leaf)
         $Package = [System.IO.Path]::Combine($SourceFolder, $redist.Release, $redist.Version, $redist.Architecture)
         $Output = [System.IO.Path]::Combine($OutputFolder, $redist.Release, $redist.Version, $redist.Architecture)
-        try {
+        if (!(Test-Path -Path $Output)) {
             New-Item -Path $Output -ItemType "Directory"
         }
-        Catch {
-            Write-Output "Warning: Directory $Output already exists"
-        }
-
-        #Start-Process -FilePath "$intuneWinAppDir\IntuneWinAppUtil.exe" -ArgumentList "-c $Package -s $SetupFile -o $Output -q" -Wait -NoNewWindow
-        
-        Write-Output "Building App Package..."
         try {
             $Win32AppPackage = New-IntuneWin32AppPackage -SourceFolder $Package -SetupFile $SetupFile -Output $Output -Verbose
         }
@@ -47,7 +56,7 @@ catch {
         
 
         #Create app icon
-        $AppIcon = New-IntuneWin32AppIcon -FilePath "$SourceFolder\Microsoft-VisualStudio.png"
+        $AppIcon = New-IntuneWin32AppIcon -FilePath "$PWD\Microsoft-VisualStudio.png"
 
         # Enable 'Associated with a 32-bit app on 64-bit clients' as required
         $KeyPath = "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
@@ -78,8 +87,8 @@ catch {
         $Publisher = "Microsoft"
         $params = @{
             FilePath                 = $Win32AppPackage.Path
-            DisplayName              = "$Publisher Visual C++ Redistributable $($redist.Release) $($redist.Version) $($redist.Architecture)"
-            Description              = "$Publisher $($redist.Name) $($redist.Version) $($redist.Architecture)."
+            DisplayName              = "$Publisher Visual C++ $($redist.Release) $($redist.Architecture) $($redist.Version)  Redistributable"
+            Description              = "$Publisher $($redist.Name) $($redist.Architecture) $($redist.Version)."
             Publisher                = $Publisher
             InformationURL           = $redist.URL
             PrivacyURL               = "https://go.microsoft.com/fwlink/?LinkId=521839"
@@ -104,7 +113,15 @@ catch {
         }
 
     }
+    Return 0
+}
+# Entrypoint
+main
 
-
+# sources:
+# https://vcredist.com/new-vcintuneapplication/#package-the-redistributables
+# https://msendpointmgr.com/2020/02/05/install-visual-c-redistributables-for-microsoft-intune-managed-devices/
+# https://github.com/MSEndpointMgr/IntuneWin32App#full-example-of-packaging-and-creating-a-win32-app
+# https://github.com/Microsoft/Microsoft-Win32-Content-Prep-Tool
 
 
